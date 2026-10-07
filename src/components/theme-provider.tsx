@@ -1,3 +1,8 @@
+/**
+ * Applies the stored theme as a class on <html>, follows the OS setting when
+ * the theme is "system", toggles with the "d" key, and syncs across tabs.
+ */
+
 import * as React from "react"
 
 type Theme = "dark" | "light" | "system"
@@ -10,17 +15,8 @@ type ThemeProviderProps = {
   disableTransitionOnChange?: boolean
 }
 
-type ThemeProviderState = {
-  theme: Theme
-  setTheme: (theme: Theme) => void
-}
-
 const COLOR_SCHEME_QUERY = "(prefers-color-scheme: dark)"
 const THEME_VALUES: Theme[] = ["dark", "light", "system"]
-
-const ThemeProviderContext = React.createContext<
-  ThemeProviderState | undefined
->(undefined)
 
 function isTheme(value: string | null): value is Theme {
   if (value === null) {
@@ -81,7 +77,6 @@ export function ThemeProvider({
   defaultTheme = "system",
   storageKey = "theme",
   disableTransitionOnChange = true,
-  ...props
 }: ThemeProviderProps) {
   const [theme, setThemeState] = React.useState<Theme>(() => {
     const storedTheme = localStorage.getItem(storageKey)
@@ -91,14 +86,6 @@ export function ThemeProvider({
 
     return defaultTheme
   })
-
-  const setTheme = React.useCallback(
-    (nextTheme: Theme) => {
-      localStorage.setItem(storageKey, nextTheme)
-      setThemeState(nextTheme)
-    },
-    [storageKey]
-  )
 
   const applyTheme = React.useCallback(
     (nextTheme: Theme) => {
@@ -203,27 +190,5 @@ export function ThemeProvider({
     }
   }, [defaultTheme, storageKey])
 
-  const value = React.useMemo(
-    () => ({
-      theme,
-      setTheme,
-    }),
-    [theme, setTheme]
-  )
-
-  return (
-    <ThemeProviderContext.Provider {...props} value={value}>
-      {children}
-    </ThemeProviderContext.Provider>
-  )
-}
-
-export const useTheme = () => {
-  const context = React.useContext(ThemeProviderContext)
-
-  if (context === undefined) {
-    throw new Error("useTheme must be used within a ThemeProvider")
-  }
-
-  return context
+  return children
 }
