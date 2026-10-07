@@ -1,5 +1,13 @@
 # EmbeddingGemma 2 on WebGPU
 
+<p align="center">
+  <a href="https://egemma.ahmad.wtf/">
+    <img src="docs/demo.webp" alt="EmbeddingGemma 2 demo: a typed query ranks a video, photos and documents together, embedding algebra turns cats into a corgi, and vectors are cut from 768 to 128 dimensions" width="720" />
+  </a>
+</p>
+
+<p align="center"><a href="https://egemma.ahmad.wtf/"><strong>Try it live at egemma.ahmad.wtf</strong></a></p>
+
 A browser demo of [EmbeddingGemma 2](https://huggingface.co/google/embeddinggemma-2), Google DeepMind's multimodal embedding model, running entirely on WebGPU. Text, images, audio and video are mapped into one shared 768-dimensional space, so a typed sentence can rank a video clip against a photo against a sound. Nothing is uploaded; every embedding is computed on the local GPU.
 
 Built with Vite, React 19, [Transformers.js](https://huggingface.co/docs/transformers.js), [shadcn/ui](https://ui.shadcn.com) on Base UI, Tailwind CSS v4 and Recharts.
