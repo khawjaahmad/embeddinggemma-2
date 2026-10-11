@@ -83,7 +83,7 @@ async function load(id: number, options: LoadOptions): Promise<void> {
     },
   })
 
-  respond({ id, type: "stage", stage: "Warming up the GPU" })
+  respond({ id, type: "stage", stage: "Warming up the model" })
   await runModel(await processor(["task: search result | query: warmup"]))
 
   const info: EngineInfo = { ...options, dim: NATIVE_DIM }

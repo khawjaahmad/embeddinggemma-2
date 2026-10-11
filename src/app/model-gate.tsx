@@ -15,6 +15,7 @@ import {
   COMPONENT_BYTES,
   COMPONENT_PARAMS,
   DTYPE,
+  type Device,
   type Modality,
 } from "@/lib/model-info"
 import { detectWebGpu, type GpuSupport } from "@/lib/webgpu"
@@ -37,7 +38,7 @@ const PRESETS: EncoderPreset[] = [
 
 /** Each downloadable component, drawn as one segment of the size bar. */
 const COMPONENTS: {
-  key: keyof typeof COMPONENT_BYTES
+  key: keyof ComponentBytes
   modality: Modality
   on: (e: EncoderSelection) => boolean
 }[] = [
@@ -46,13 +47,14 @@ const COMPONENTS: {
   { key: "audio", modality: "audio", on: (e) => e.audio },
 ]
 
-const FULL_BYTES =
-  COMPONENT_BYTES.text + COMPONENT_BYTES.vision + COMPONENT_BYTES.audio
+type ComponentBytes = (typeof COMPONENT_BYTES)[Device]
 
-function downloadSize(encoders: EncoderSelection): number {
+function downloadSize(
+  encoders: EncoderSelection,
+  bytes: ComponentBytes
+): number {
   return COMPONENTS.reduce(
-    (total, part) =>
-      total + (part.on(encoders) ? COMPONENT_BYTES[part.key] : 0),
+    (total, part) => total + (part.on(encoders) ? bytes[part.key] : 0),
     0
   )
 }
@@ -67,24 +69,32 @@ export function ModelGate({
   const [presetId, setPresetId] = useState(initialPreset)
 
   useEffect(() => {
-    detectWebGpu().then(setGpu)
+    detectWebGpu().then((support) => {
+      setGpu(support)
+      // On CPU the vision encoder runs out of WASM memory; only text is offered.
+      if (!support.supported) setPresetId("text")
+    })
   }, [])
 
   const preset = PRESETS.find((p) => p.id === presetId) ?? PRESETS[1]
   const isLoading = status === "loading"
 
-  if (gpu && !gpu.supported) {
-    return (
-      <Alert variant="destructive">
-        <TriangleAlertIcon />
-        <AlertTitle>WebGPU unavailable</AlertTitle>
-        <AlertDescription>{gpu.reason}</AlertDescription>
-      </Alert>
-    )
-  }
+  // The model card lists "wasm" as the browser alternative to WebGPU.
+  const device: Device = gpu && !gpu.supported ? "wasm" : "webgpu"
+  const bytes = COMPONENT_BYTES[device]
 
   return (
     <div className="flex flex-col gap-4">
+      {device === "wasm" && (
+        <Alert>
+          <TriangleAlertIcon />
+          <AlertTitle>WebGPU unavailable, running on CPU</AlertTitle>
+          <AlertDescription>
+            {gpu?.reason} Text search still runs on the CPU through WebAssembly,
+            more slowly; images and audio need WebGPU.
+          </AlertDescription>
+        </Alert>
+      )}
       <ToggleGroup
         className="w-full flex-col items-stretch sm:flex-row"
         value={[presetId]}
@@ -97,6 +107,7 @@ export function ModelGate({
           <ToggleGroupItem
             key={option.id}
             value={option.id}
+            disabled={device === "wasm" && option.id !== "text"}
             className="h-auto flex-1 flex-col items-stretch gap-3 rounded-none! px-4 py-3"
           >
             <span className="flex items-center gap-1.5">
@@ -113,7 +124,7 @@ export function ModelGate({
               )}
               <span className="ml-1 text-sm font-medium">{option.label}</span>
             </span>
-            <SizeBar encoders={option.encoders} />
+            <SizeBar encoders={option.encoders} bytes={bytes} />
           </ToggleGroupItem>
         ))}
       </ToggleGroup>
@@ -123,7 +134,11 @@ export function ModelGate({
           size="lg"
           disabled={isLoading || !gpu}
           onClick={() =>
-            load({ device: "webgpu", dtype: DTYPE, encoders: preset.encoders })
+            load({
+              device,
+              dtype: DTYPE[device],
+              encoders: preset.encoders,
+            })
           }
         >
           {isLoading ? (
@@ -133,7 +148,7 @@ export function ModelGate({
           )}
           {isLoading
             ? "Loading"
-            : `Load ${formatBytes(downloadSize(preset.encoders))}`}
+            : `Load ${formatBytes(downloadSize(preset.encoders, bytes))}`}
         </Button>
 
         {gpu?.adapter && (
@@ -170,24 +185,31 @@ export function ModelGate({
 }
 
 /** Download size as segments on a common scale, so presets compare by length. */
-function SizeBar({ encoders }: { encoders: EncoderSelection }) {
+function SizeBar({
+  encoders,
+  bytes,
+}: {
+  encoders: EncoderSelection
+  bytes: ComponentBytes
+}) {
+  const full = bytes.text + bytes.vision + bytes.audio
   return (
     <span className="flex flex-col gap-1.5">
       <span className="flex h-1.5 gap-0.5">
         {COMPONENTS.filter((part) => part.on(encoders)).map((part) => (
           <span
             key={part.key}
-            title={`${part.key} · ${COMPONENT_PARAMS[part.key]} · ${formatBytes(COMPONENT_BYTES[part.key])}`}
+            title={`${part.key} · ${COMPONENT_PARAMS[part.key]} · ${formatBytes(bytes[part.key])}`}
             className="h-full rounded-[2px]"
             style={{
-              width: `${(COMPONENT_BYTES[part.key] / FULL_BYTES) * 100}%`,
+              width: `${(bytes[part.key] / full) * 100}%`,
               backgroundColor: MODALITY_COLORS[part.modality],
             }}
           />
         ))}
       </span>
       <span className="text-left font-mono text-[11px] text-muted-foreground tabular-nums">
-        {formatBytes(downloadSize(encoders))}
+        {formatBytes(downloadSize(encoders, bytes))}
       </span>
     </span>
   )

@@ -17,22 +17,26 @@ export type MrlDim = (typeof MRL_DIMS)[number]
 export type Modality = "text" | "image" | "audio" | "video"
 
 /**
- * Precision per component. The card recommends q4 on WebGPU, with one exception:
- * audio is "the modality that 4-bit quantization affects the most", so the audio
- * encoder runs at q8. Worst-case cosine to fp32 is 0.975 at q4 (0.988 for text)
- * against 0.9997 at q8.
+ * Precision per component and device. The card recommends q4 on WebGPU, with one
+ * exception: audio is "the modality that 4-bit quantization affects the most", so
+ * the audio encoder runs at q8. Worst-case cosine to fp32 is 0.975 at q4 (0.988
+ * for text) against 0.9997 at q8.
+ *
+ * The WASM fallback cannot use q4 or q8 for text and vision: both graphs embed
+ * through a GatherBlockQuantized node that ONNX Runtime Web's CPU build has no
+ * kernel for, so those load at fp16. The audio graph has no such node.
  */
 export const DTYPE = {
-  model: "q4",
-  vision_encoder: "q4",
-  audio_encoder: "q8",
+  webgpu: { model: "q4", vision_encoder: "q4", audio_encoder: "q8" },
+  wasm: { model: "fp16", vision_encoder: "fp16", audio_encoder: "q8" },
 } as const
 
-/** Download size in bytes of each component at the precision above, from the card's dtype table. */
+export type Device = keyof typeof DTYPE
+
+/** Download size in bytes of each component at the precisions above, from the card's dtype table. */
 export const COMPONENT_BYTES = {
-  text: 175e6,
-  vision: 109e6,
-  audio: 340e6,
+  webgpu: { text: 175e6, vision: 109e6, audio: 340e6 },
+  wasm: { text: 543e6, vision: 336e6, audio: 340e6 },
 } as const
 
 /** Parameter counts per component, from the model card's "Flexible footprint". */
