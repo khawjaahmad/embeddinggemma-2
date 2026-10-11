@@ -8,7 +8,7 @@
 
 <p align="center"><a href="https://egemma.ahmad.wtf/"><strong>Try it live at egemma.ahmad.wtf</strong></a></p>
 
-A browser demo of [EmbeddingGemma 2](https://huggingface.co/google/embeddinggemma-2), Google DeepMind's multimodal embedding model, running entirely on WebGPU. Text, images, audio and video are mapped into one shared 768-dimensional space, so a typed sentence can rank a video clip against a photo against a sound. Nothing is uploaded; every embedding is computed on the local GPU.
+A browser demo of [EmbeddingGemma 2](https://huggingface.co/google/embeddinggemma-2), Google DeepMind's multimodal embedding model, running entirely in the browser on WebGPU, with a WebAssembly CPU fallback. Text, images, audio and video are mapped into one shared 768-dimensional space, so a typed sentence can rank a video clip against a photo against a sound. Nothing is uploaded; every embedding is computed on the device.
 
 Built with Vite, React 19, [Transformers.js](https://huggingface.co/docs/transformers.js), [shadcn/ui](https://ui.shadcn.com) on Base UI, Tailwind CSS v4 and Recharts.
 
@@ -19,7 +19,7 @@ npm install
 npm run dev
 ```
 
-Needs a browser with WebGPU (Chrome 113+, Edge 113+, or Safari 26+). The app detects support and says so if it is missing.
+Runs fastest with WebGPU (Chrome 113+, Edge 113+, or Safari 26+). Without it, for example Chrome on Linux, the app says so and runs every modality on the CPU through WebAssembly instead, more slowly.
 
 | Script              | Purpose                               |
 | :------------------ | :------------------------------------ |
@@ -33,7 +33,7 @@ Needs a browser with WebGPU (Chrome 113+, Edge 113+, or Safari 26+). The app det
 
 A dark dashboard: a sidebar to switch demos, a header with the indexing ring and the vector-size switch (768, 512, 256, 128), and each demo laid out as a grid of panels. Results are shown as thumbnails, charts and vector plots rather than prose, and each modality keeps one colour everywhere: image blue, audio orange, video green, text amber.
 
-The first screen picks which encoders to load, drawn as bars sized by download: text only (175 MB), text and vision (284 MB), or everything (624 MB). After loading, the 31-item gallery (16 images, 5 audio clips, 4 videos, 6 documents) is indexed in the background; items whose encoder is not loaded are skipped.
+The first screen picks which encoders to load, drawn as bars sized by download: text only (175 MB), text and vision (284 MB), or everything (624 MB). After loading, the 31-item gallery (16 images, 5 audio clips, 4 videos, 6 documents) is indexed in the background, cheapest modality first so search is useful within seconds; items whose encoder is not loaded are skipped.
 
 ## The four demos
 
@@ -50,6 +50,8 @@ The first screen picks which encoders to load, drawn as bars sized by download: 
 **Model loading is selective.** The vision and audio encoders are separate files, so nulling their configs before `AutoModel.from_pretrained` skips those downloads entirely.
 
 **Precision is per component.** The text and vision encoders run at `q4`; the audio encoder runs at `q8`, because the model card singles out audio as the modality 4-bit quantization affects most. See `DTYPE` in `src/lib/model-info.ts`.
+
+**The CPU fallback runs the same weights.** When no WebGPU adapter is found, the worker loads on `wasm` with the same `q4`/`q8` files. Transformers.js defaults to ONNX Runtime's asyncify build, which has no CPU kernel for the `GatherBlockQuantized` embedding node in the quantized graphs, so the worker points ONNX Runtime at the plain SIMD build instead. On CPU, images use 140 soft tokens instead of 280 and video frames 70 instead of 140, one of the vision budgets the model card allows: images embed 2.4x faster with title-to-image retrieval on the gallery intact. See `VISION_BUDGET` in `src/lib/model-info.ts`. On a recent laptop an image takes about 3 seconds, a video about 30, and the whole gallery under four minutes.
 
 **Media is decoded on the main thread, inference runs in a worker.** This split is forced rather than chosen: `load_video` needs a DOM `<video>` element and `load_audio` needs an `AudioContext`, neither of which exists in a worker. The main thread decodes to raw pixels and PCM, which transfer to the worker without copying.
 
@@ -85,7 +87,7 @@ src/
 
 ## Deploying
 
-The repo includes a `vercel.json` for a static SPA deploy. No special headers are needed; WebGPU does not require cross-origin isolation, and adding COOP/COEP would break the cross-origin fetches of model weights and demo assets.
+The repo includes a `vercel.json` for a static SPA deploy. It sets `Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Policy: credentialless`, which make the page cross-origin isolated so ONNX Runtime can run the CPU fallback on several threads (about 4x faster than one). `credentialless` rather than `require-corp` keeps the cross-origin model weights and demo media loading. WebGPU does not need these headers; the Vite dev and preview servers send the same ones, so local runs match production.
 
 ## Credits
 
