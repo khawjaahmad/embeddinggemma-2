@@ -38,16 +38,20 @@ export type DecodedInput =
   | { kind: "audio"; samples: Float32Array; durationSec: number }
   | { kind: "video"; frames: PixelFrame[]; durationSec: number }
 
+/** Soft tokens per image and per video frame; the card allows 70, 140, 280, 560 or 1120. */
+export interface VisionBudget {
+  image: number
+  videoFrame: number
+}
+
 export interface LoadOptions {
   device: Device
   dtype: DtypeConfig
   encoders: EncoderSelection
+  visionBudget: VisionBudget
 }
 
-export interface EngineInfo {
-  device: Device
-  dtype: DtypeConfig
-  encoders: EncoderSelection
+export interface EngineInfo extends LoadOptions {
   dim: number
 }
 

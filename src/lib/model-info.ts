@@ -17,26 +17,35 @@ export type MrlDim = (typeof MRL_DIMS)[number]
 export type Modality = "text" | "image" | "audio" | "video"
 
 /**
- * Precision per component and device. The card recommends q4 on WebGPU, with one
- * exception: audio is "the modality that 4-bit quantization affects the most", so
- * the audio encoder runs at q8. Worst-case cosine to fp32 is 0.975 at q4 (0.988
- * for text) against 0.9997 at q8.
- *
- * The WASM fallback cannot use q4 or q8 for text and vision: both graphs embed
- * through a GatherBlockQuantized node that ONNX Runtime Web's CPU build has no
- * kernel for, so those load at fp16. The audio graph has no such node.
+ * Precision per component, on WebGPU and the WASM fallback alike. The card
+ * recommends q4, with one exception: audio is "the modality that 4-bit
+ * quantization affects the most", so the audio encoder runs at q8. Worst-case
+ * cosine to fp32 is 0.975 at q4 (0.988 for text) against 0.9997 at q8.
  */
 export const DTYPE = {
-  webgpu: { model: "q4", vision_encoder: "q4", audio_encoder: "q8" },
-  wasm: { model: "fp16", vision_encoder: "fp16", audio_encoder: "q8" },
+  model: "q4",
+  vision_encoder: "q4",
+  audio_encoder: "q8",
 } as const
 
-export type Device = keyof typeof DTYPE
+export type Device = "webgpu" | "wasm"
 
-/** Download size in bytes of each component at the precisions above, from the card's dtype table. */
+/**
+ * Soft tokens per image and per video frame. WebGPU keeps the card's defaults.
+ * On CPU, 140 per image embeds 2.4x faster with title-to-image retrieval intact
+ * (16/16 top-1 on the corpus against 15/16 at 280), and 70 per frame halves the
+ * cost of a video.
+ */
+export const VISION_BUDGET = {
+  webgpu: { image: 280, videoFrame: 140 },
+  wasm: { image: 140, videoFrame: 70 },
+} as const satisfies Record<Device, { image: number; videoFrame: number }>
+
+/** Download size in bytes of each component at the precision above, from the card's dtype table. */
 export const COMPONENT_BYTES = {
-  webgpu: { text: 175e6, vision: 109e6, audio: 340e6 },
-  wasm: { text: 543e6, vision: 336e6, audio: 340e6 },
+  text: 175e6,
+  vision: 109e6,
+  audio: 340e6,
 } as const
 
 /** Parameter counts per component, from the model card's "Flexible footprint". */

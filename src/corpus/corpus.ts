@@ -237,6 +237,21 @@ export function countByModality(items: CorpusItem[]): Record<Modality, number> {
   return counts
 }
 
+/** Relative embedding cost; a video samples 16 frames through the vision encoder. */
+const MODALITY_COST: Record<Modality, number> = {
+  text: 0,
+  audio: 1,
+  image: 2,
+  video: 3,
+}
+
+/** Cheapest first, so search becomes useful early while slow items are indexed. */
+export function byEmbeddingCost(items: CorpusItem[]): CorpusItem[] {
+  return items.toSorted(
+    (a, b) => MODALITY_COST[a.modality] - MODALITY_COST[b.modality]
+  )
+}
+
 /** Which encoders an item needs, so the UI can hide what is not loaded. */
 export function requiresEncoder(item: CorpusItem): "vision" | "audio" | null {
   if (item.modality === "image" || item.modality === "video") return "vision"

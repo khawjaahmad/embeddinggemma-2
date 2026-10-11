@@ -15,6 +15,7 @@ import {
   COMPONENT_BYTES,
   COMPONENT_PARAMS,
   DTYPE,
+  VISION_BUDGET,
   type Device,
   type Modality,
 } from "@/lib/model-info"
@@ -38,7 +39,7 @@ const PRESETS: EncoderPreset[] = [
 
 /** Each downloadable component, drawn as one segment of the size bar. */
 const COMPONENTS: {
-  key: keyof ComponentBytes
+  key: keyof typeof COMPONENT_BYTES
   modality: Modality
   on: (e: EncoderSelection) => boolean
 }[] = [
@@ -47,14 +48,10 @@ const COMPONENTS: {
   { key: "audio", modality: "audio", on: (e) => e.audio },
 ]
 
-type ComponentBytes = (typeof COMPONENT_BYTES)[Device]
-
-function downloadSize(
-  encoders: EncoderSelection,
-  bytes: ComponentBytes
-): number {
+function downloadSize(encoders: EncoderSelection): number {
   return COMPONENTS.reduce(
-    (total, part) => total + (part.on(encoders) ? bytes[part.key] : 0),
+    (total, part) =>
+      total + (part.on(encoders) ? COMPONENT_BYTES[part.key] : 0),
     0
   )
 }
@@ -69,11 +66,7 @@ export function ModelGate({
   const [presetId, setPresetId] = useState(initialPreset)
 
   useEffect(() => {
-    detectWebGpu().then((support) => {
-      setGpu(support)
-      // On CPU the vision encoder runs out of WASM memory; only text is offered.
-      if (!support.supported) setPresetId("text")
-    })
+    detectWebGpu().then(setGpu)
   }, [])
 
   const preset = PRESETS.find((p) => p.id === presetId) ?? PRESETS[1]
@@ -81,7 +74,6 @@ export function ModelGate({
 
   // The model card lists "wasm" as the browser alternative to WebGPU.
   const device: Device = gpu && !gpu.supported ? "wasm" : "webgpu"
-  const bytes = COMPONENT_BYTES[device]
 
   return (
     <div className="flex flex-col gap-4">
@@ -90,8 +82,9 @@ export function ModelGate({
           <TriangleAlertIcon />
           <AlertTitle>WebGPU unavailable, running on CPU</AlertTitle>
           <AlertDescription>
-            {gpu?.reason} Text search still runs on the CPU through WebAssembly,
-            more slowly; images and audio need WebGPU.
+            {gpu?.reason} Every modality still runs on the CPU through
+            WebAssembly, just slower: text and audio take moments, each image a
+            few seconds, and a video around twenty.
           </AlertDescription>
         </Alert>
       )}
@@ -107,7 +100,6 @@ export function ModelGate({
           <ToggleGroupItem
             key={option.id}
             value={option.id}
-            disabled={device === "wasm" && option.id !== "text"}
             className="h-auto flex-1 flex-col items-stretch gap-3 rounded-none! px-4 py-3"
           >
             <span className="flex items-center gap-1.5">
@@ -124,7 +116,7 @@ export function ModelGate({
               )}
               <span className="ml-1 text-sm font-medium">{option.label}</span>
             </span>
-            <SizeBar encoders={option.encoders} bytes={bytes} />
+            <SizeBar encoders={option.encoders} />
           </ToggleGroupItem>
         ))}
       </ToggleGroup>
@@ -136,8 +128,9 @@ export function ModelGate({
           onClick={() =>
             load({
               device,
-              dtype: DTYPE[device],
+              dtype: DTYPE,
               encoders: preset.encoders,
+              visionBudget: VISION_BUDGET[device],
             })
           }
         >
@@ -148,7 +141,7 @@ export function ModelGate({
           )}
           {isLoading
             ? "Loading"
-            : `Load ${formatBytes(downloadSize(preset.encoders, bytes))}`}
+            : `Load ${formatBytes(downloadSize(preset.encoders))}`}
         </Button>
 
         {gpu?.adapter && (
@@ -185,13 +178,8 @@ export function ModelGate({
 }
 
 /** Download size as segments on a common scale, so presets compare by length. */
-function SizeBar({
-  encoders,
-  bytes,
-}: {
-  encoders: EncoderSelection
-  bytes: ComponentBytes
-}) {
+function SizeBar({ encoders }: { encoders: EncoderSelection }) {
+  const bytes = COMPONENT_BYTES
   const full = bytes.text + bytes.vision + bytes.audio
   return (
     <span className="flex flex-col gap-1.5">
@@ -209,7 +197,7 @@ function SizeBar({
         ))}
       </span>
       <span className="text-left font-mono text-[11px] text-muted-foreground tabular-nums">
-        {formatBytes(downloadSize(encoders, bytes))}
+        {formatBytes(downloadSize(encoders))}
       </span>
     </span>
   )

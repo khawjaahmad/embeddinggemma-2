@@ -11,6 +11,7 @@ import {
   AutoProcessor,
   RawImage,
   RawVideo,
+  env,
 } from "@huggingface/transformers"
 
 import { MODEL_ID, NATIVE_DIM, SAFE_TOKEN_BUDGET } from "@/lib/model-info"
@@ -48,7 +49,23 @@ function toRawImage(frame: PixelFrame) {
   return new RawImage(frame.data, frame.width, frame.height, 4).rgb()
 }
 
+/**
+ * Transformers.js defaults to ONNX Runtime's asyncify build, which has no CPU
+ * kernel for the GatherBlockQuantized embedding node in the q4 and q8 graphs.
+ * The plain SIMD build does, and it is all a CPU session needs. ONNX Runtime
+ * reads this once, at its first session.
+ */
+function selectCpuRuntimeBuild() {
+  const onnx = env.backends.onnx
+  const dist = `https://cdn.jsdelivr.net/npm/onnxruntime-web@${onnx.versions?.web}/dist`
+  onnx.wasm!.wasmPaths = {
+    mjs: `${dist}/ort-wasm-simd-threaded.mjs`,
+    wasm: `${dist}/ort-wasm-simd-threaded.wasm`,
+  }
+}
+
 async function load(id: number, options: LoadOptions): Promise<void> {
+  if (options.device === "wasm") selectCpuRuntimeBuild()
   await model?.dispose?.()
   model = null
   processor = null
@@ -63,6 +80,9 @@ async function load(id: number, options: LoadOptions): Promise<void> {
 
   respond({ id, type: "stage", stage: "Loading tokenizer and processor" })
   processor = await AutoProcessor.from_pretrained(MODEL_ID)
+  processor.image_processor.max_soft_tokens = options.visionBudget.image
+  processor.video_processor.frame_processor.max_soft_tokens =
+    options.visionBudget.videoFrame
 
   respond({ id, type: "stage", stage: "Fetching weights" })
   model = await AutoModel.from_pretrained(MODEL_ID, {

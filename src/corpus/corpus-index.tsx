@@ -11,6 +11,7 @@ import {
 import { useEngine } from "@/embedder/engine-context"
 import {
   CORPUS,
+  byEmbeddingCost,
   decodeCorpusItem,
   requiresEncoder,
   type CorpusItem,
@@ -83,12 +84,14 @@ export function CorpusIndexProvider({
     let cancelled = false
     const startedAt = performance.now()
 
+    const queue = byEmbeddingCost(items)
+
     const run = async () => {
       setStatus("indexing")
       setError(null)
-      setProgress({ done: 0, total: items.length, label: items[0].title })
+      setProgress({ done: 0, total: queue.length, label: queue[0].title })
 
-      for (const [position, item] of items.entries()) {
+      for (const [position, item] of queue.entries()) {
         if (cancelled) return
         setProgress({ done: position, total: items.length, label: item.title })
 
